@@ -1,76 +1,58 @@
-const { Engine, Render, Runner, World, Bodies } = Matter;
+const { Engine, Render, Runner, World, Bodies, Body, Events } = Matter;
 
-const cells = 3;
-const canvasWidth = 600;
-const canvasHeight = 600;
+const cells = 6;
+const width = 600;
+const height = 600;
 
-const unitLength = canvasWidth / cells;
+const unitLength = width / cells;
 
 const engine = Engine.create();
+//Gravity OFF
+engine.world.gravity.y = 0;
+
 const { world } = engine;
 const render = Render.create({
   element: document.body,
   engine: engine,
   options: {
     wireframes: true,
-    width: canvasWidth,
-    height: canvasHeight,
+    width,
+    height,
   },
 });
-
 Render.run(render);
 Runner.run(Runner.create(), engine);
 
-//WALLS
+// Walls
 const walls = [
-  //TOP WALL
-  Bodies.rectangle(canvasWidth / 2, 0, canvasWidth, 40, {
-    isStatic: true,
-  }),
-  //BOTTOM WALL
-  Bodies.rectangle(canvasWidth / 2, canvasHeight, canvasWidth, 40, {
-    isStatic: true,
-  }),
-  //LEFT WALL
-  Bodies.rectangle(0, canvasHeight / 2, 40, canvasHeight, {
-    isStatic: true,
-  }),
-  //RIGHT WALL
-  Bodies.rectangle(canvasWidth, canvasHeight / 2, 40, canvasHeight, {
-    isStatic: true,
-  }),
+  Bodies.rectangle(width / 2, 0, width, 2, { isStatic: true }),
+  Bodies.rectangle(width / 2, height, width, 2, { isStatic: true }),
+  Bodies.rectangle(0, height / 2, 2, height, { isStatic: true }),
+  Bodies.rectangle(width, height / 2, 2, height, { isStatic: true }),
 ];
-
 World.add(world, walls);
 
-//MAZE GENERATION
+// Maze generation
 
 const shuffle = (arr) => {
   let counter = arr.length;
 
   while (counter > 0) {
     const index = Math.floor(Math.random() * counter);
+
     counter--;
+
     const temp = arr[counter];
     arr[counter] = arr[index];
     arr[index] = temp;
   }
+
   return arr;
 };
 
-// const grid = [];
-// for (let i = 0; i < 3; i++) {
-//   grid.push([]);
-//   for (let j = 0; j < 3; j++) {
-//     grid[i].push(false);
-//   }
-// }
-//other way to build grid
 const grid = Array(cells)
   .fill(null)
-  .map(function () {
-    return Array(cells).fill(false);
-  });
+  .map(() => Array(cells).fill(false));
 
 const verticals = Array(cells)
   .fill(null)
@@ -84,26 +66,26 @@ const startRow = Math.floor(Math.random() * cells);
 const startColumn = Math.floor(Math.random() * cells);
 
 const stepThroughCell = (row, column) => {
-  //If I have visited the cell at [row, column], then return
+  // If i have visted the cell at [row, column], then return
   if (grid[row][column]) {
     return;
   }
-  //Mark this cell as being visited
+
+  // Mark this cell as being visited
   grid[row][column] = true;
 
-  //Assemble randomly-ordered list of neighbors
+  // Assemble randomly-ordered list of neighbors
   const neighbors = shuffle([
     [row - 1, column, "up"],
     [row, column + 1, "right"],
     [row + 1, column, "down"],
     [row, column - 1, "left"],
   ]);
-
-  //For each neighbor...
+  // For each neighbor....
   for (let neighbor of neighbors) {
     const [nextRow, nextColumn, direction] = neighbor;
 
-    //See if that neighbor is out of bounds
+    // See if that neighbor is out of bounds
     if (
       nextRow < 0 ||
       nextRow >= cells ||
@@ -112,26 +94,27 @@ const stepThroughCell = (row, column) => {
     ) {
       continue;
     }
-    //If we have visited that neighbor, continue to next neighbor
+
+    // If we have visited that neighbor, continue to next neighbor
     if (grid[nextRow][nextColumn]) {
       continue;
     }
-    //Remove a wall from either horizontals or verticals
+
+    // Remove a wall from either horizontals or verticals
     if (direction === "left") {
       verticals[row][column - 1] = true;
     } else if (direction === "right") {
-      // verticals[row][column + 1] = true;
       verticals[row][column] = true;
     } else if (direction === "up") {
       horizontals[row - 1][column] = true;
     } else if (direction === "down") {
       horizontals[row][column] = true;
     }
-    stepThroughCell(startRow, startColumn);
+
+    stepThroughCell(nextRow, nextColumn);
   }
 };
 
-//Visit the next neighbor
 stepThroughCell(startRow, startColumn);
 
 horizontals.forEach((row, rowIndex) => {
@@ -145,7 +128,10 @@ horizontals.forEach((row, rowIndex) => {
       rowIndex * unitLength + unitLength,
       unitLength,
       5,
-      { isStatic: true }
+      {
+        label: "wall_horizontal",
+        isStatic: true,
+      }
     );
     World.add(world, wall);
   });
@@ -156,13 +142,79 @@ verticals.forEach((row, rowIndex) => {
     if (open) {
       return;
     }
+
     const wall = Bodies.rectangle(
       columnIndex * unitLength + unitLength,
       rowIndex * unitLength + unitLength / 2,
-      unitLength,
       5,
-      { isStatic: true }
+      unitLength,
+      {
+        label: "wall_vertical",
+        isStatic: true,
+      }
     );
     World.add(world, wall);
+  });
+});
+
+//Destination / Goal
+const goal = Bodies.rectangle(
+  width - unitLength / 2,
+  height - unitLength / 2,
+  unitLength * 0.7,
+  unitLength * 0.7,
+  {
+    label: "goal",
+    isStatic: true,
+  }
+);
+World.add(world, goal);
+
+//Ball
+const ball = Bodies.circle(unitLength / 2, unitLength / 2, unitLength / 4, {
+  label: "ball",
+});
+World.add(world, ball);
+
+document.addEventListener("keydown", (event) => {
+  const { x, y } = ball.velocity;
+
+  //move ball up
+  if (event.keyCode === 38) {
+    Body.setVelocity(ball, { x: x, y: y - 3 });
+  }
+  //move ball down
+  if (event.keyCode === 40) {
+    Body.setVelocity(ball, { x: x, y: y + 3 });
+  }
+  //move ball left
+  if (event.keyCode === 37) {
+    Body.setVelocity(ball, { x: x - 3, y: y });
+  }
+  //move ball right
+  if (event.keyCode === 39) {
+    Body.setVelocity(ball, { x: x + 3, y: y });
+  }
+});
+
+//Win condition
+Events.on(engine, "collisionStart", (event) => {
+  event.pairs.forEach((collision) => {
+    // console.log(collision);
+    const labels = ["ball", "goal"];
+    if (
+      labels.includes(collision.bodyA.label) &&
+      labels.includes(collision.bodyB.label)
+    ) {
+      world.gravity.y = 1;
+      world.bodies.forEach((body) => {
+        if (
+          body.label === "wall_horizontal" ||
+          body.label === "wall_vertical"
+        ) {
+          Body.setStatic(body, false);
+        }
+      });
+    }
   });
 });
